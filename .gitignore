@@ -11,3 +11,5 @@ TestResults
 *.exe
 
 /templates
+.vs
+packages
