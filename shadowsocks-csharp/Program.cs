@@ -72,8 +72,8 @@ namespace Shadowsocks
                     try_times += 1;
                 }
 #endif
-                _syncController = new SyncController();
                 _controller = new ShadowsocksController();
+                _syncController = new SyncController(_controller);
 
 #if !_CONSOLE
                 _viewController = new MenuViewController(_controller);

@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using LeanCloud;
+using Shadowsocks.Controller;
 using Shadowsocks.Model;
 
 namespace Shadowsocks.Lean
@@ -10,19 +12,22 @@ namespace Shadowsocks.Lean
     public class SyncController
     {
         private FileSystemWatcher _fileSystemWatcher;
+        private readonly WatcherTimer _watcherTimer;
         private string _globolConfFile = "gui-config.json";
 
         private string _appId;
         private string _appKey;
 
-        private readonly WatcherTimer _watcherTimer;
+        private ShadowsocksController _shadowsocksController;
 
         public SyncController(
+            ShadowsocksController controller,
             string appId = "G80hgDhEiwXllsbkS0cpJHoa-gzGzoHsz",
             string appKey = "n53lptg38slufxSYmT28uIFF")
         {
             _appId = appId;
             _appKey = appKey;
+            _shadowsocksController = controller;
 
             AVClient.Initialize(_appId, _appKey);
 
@@ -45,12 +50,36 @@ namespace Shadowsocks.Lean
             _fileSystemWatcher.Changed += _watcherTimer.OnFileChanged;
             _fileSystemWatcher.Renamed += _watcherTimer.OnFileChanged;
             _fileSystemWatcher.Deleted += _watcherTimer.OnFileChanged;
+
+            ThreadPool.QueueUserWorkItem(GetRemoveServerConf, null);
         }
 
 
         List<Server> GetServersFromConf()
         {
             return Configuration.Load()?.configs;
+        }
+
+        void GetRemoveServerConf(object obj)
+        {
+            try
+            {
+                var avObjs = new AVQuery<AVObject>("Server").FindAsync().Result;
+                List<Server> servers = new List<Server>();
+                foreach (var avObject in avObjs)
+                    servers.Add(avObject.ToT<Server>());
+
+                if (servers.Any())
+                {
+                    var configuration = new Configuration();
+                    configuration.configs.AddRange(servers);
+                    _shadowsocksController.SaveServersConfig(configuration);
+                }
+            }
+            catch (Exception)
+            {
+                //Ignore
+            }
         }
 
         void SyncAllServer(List<Server> servers)
@@ -67,11 +96,9 @@ namespace Shadowsocks.Lean
             if (server == null)
                 return;
 
-            string className = "Server";
-
             try
             {
-                var objectId = QueryObjectId(className, server.id);
+                var objectId = QueryServerId(server);
 
                 var avObj = server.ToAv();
                 avObj.ObjectId = objectId;
@@ -83,11 +110,15 @@ namespace Shadowsocks.Lean
             }
         }
 
-        string QueryObjectId(string className,string id)
+        string QueryServerId(Server server)
         {
             try
             {
-                var query = new AVQuery<AVObject>(className).WhereEqualTo("id", id)
+                var query = new AVQuery<AVObject>(server.GetType().Name)
+                    .WhereEqualTo("server_port", server.server_port)
+                    .WhereEqualTo("server",server.server)
+                    .WhereEqualTo("group", server.group)
+                    .WhereEqualTo("remarks", server.remarks)
                     .FirstOrDefaultAsync()
                     .Result;
 
@@ -122,6 +153,15 @@ namespace Shadowsocks.Lean
                 avObject[field.Name] = value;
             }
 
+            foreach (var property in obj.GetType().GetProperties())
+            {
+                var value = property.GetValue(obj);
+                if (value == null)
+                    continue;
+
+                avObject[property.Name] = value;
+            }
+
             return avObject;
         }
 
@@ -142,6 +182,18 @@ namespace Shadowsocks.Lean
                     continue;
 
                 propertyInfo.SetValue(currentCrmsObject, avObject[propertyInfo.Name]);
+            }
+
+            foreach (var field in currentCrmsObject.GetType().GetFields())
+            {
+                if (!field.IsPublic)
+                    continue;
+
+
+                if (!avObject.Keys.Contains(field.Name))
+                    continue;
+
+                field.SetValue(currentCrmsObject, avObject[field.Name]);
             }
 
             return (T) currentCrmsObject;
