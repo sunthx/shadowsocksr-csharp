@@ -7,6 +7,7 @@ using System.IO;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
+using Shadowsocks.Lean;
 using Shadowsocks.Model;
 #if !_CONSOLE
 using Shadowsocks.View;
@@ -20,7 +21,7 @@ namespace Shadowsocks
 #if !_CONSOLE
         static MenuViewController _viewController;
 #endif
-
+        private static SyncController _syncController;
         /// <summary>
         /// 应用程序的主入口点。
         /// </summary>
@@ -71,6 +72,7 @@ namespace Shadowsocks
                     try_times += 1;
                 }
 #endif
+                _syncController = new SyncController();
                 _controller = new ShadowsocksController();
 
 #if !_CONSOLE
