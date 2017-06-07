@@ -14,11 +14,12 @@ namespace Shadowsocks.Lean
         private FileSystemWatcher _fileSystemWatcher;
         private readonly WatcherTimer _watcherTimer;
         private string _globolConfFile = "gui-config.json";
+        private string _filterGroupName = "FreeSSR-public";
 
         private string _appId;
         private string _appKey;
 
-        private ShadowsocksController _shadowsocksController;
+        private readonly ShadowsocksController _shadowsocksController;
 
         public SyncController(
             ShadowsocksController controller,
@@ -86,6 +87,9 @@ namespace Shadowsocks.Lean
         {
             servers?.ForEach(item =>
             {
+                if(item.group.Contains(_filterGroupName))
+                    return;
+
                 ThreadPool.QueueUserWorkItem(SyncSingleServer, item);
             });
         }
